@@ -34,7 +34,7 @@ This solution was developed as part of a assignment, focusing on demonstrating P
 
 ## 4. Input Data
 
-The data product consumes two main CSV files (both can be found in the 'data' folder):
+The data product consumes two main CSV files - both can be found in the 'data' folder:
 
 * **`Transactions.csv`**: Contains raw change data capture (CDC) updates to users wallets over time.
     * **Columns:**
