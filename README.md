@@ -29,7 +29,7 @@ This solution was developed as part of a assignment, focusing on demonstrating P
     ```
 * **In a Databricks Notebook:**
     1.  Upload the script or paste its content into a notebook cell.
-    2.  Ensure the input CSV files are accessible (e.g., in DBFS at the specified paths).
+    2.  Ensure the input CSV files found in data folder of this repository are accessible (e.g., in DBFS at the specified paths).
     3.  Run the notebook.
 
 ## 4. Input Data
