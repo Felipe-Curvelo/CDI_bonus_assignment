@@ -1,4 +1,4 @@
-# CDI Bonus Calculation Data Product
+[# CDI Bonus Calculation Data Product
 
 ## 1. Overview
 
@@ -232,3 +232,4 @@ The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is
 * **Delta Lake Integration:** For enhanced reliability, ACID transactions, and time travel capabilities on the output tables, consider using Delta Lake format instead of basic Parquet or Hive tables, especially if operating in an environment like Databricks.
 * **Parameterization of Interest Rules:** If rules (like the $100 threshold or movement rules) might change frequently, consider making them configurable.
 * **Workflow Orchestration:** Integrate the application into a data pipeline orchestrator (e.g., Airflow, ADF) for improved end-to-end manageability of the entire CDI bonus calculation workflow.
+](https://www.loom.com/share/c07b7f28d13e467199a192ac46f53a7b?sid=a1e7cbd0-795c-423f-a643-f875584414c3)
