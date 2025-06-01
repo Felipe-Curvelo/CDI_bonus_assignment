@@ -5,23 +5,17 @@
 This project implements a data product to calculate the daily CDI (Certificado de Depósito Interbancário) bonus for user wallet balances. It processes raw transaction data and daily CDI rates to determine user eligibility, calculate interest earned, and generate interest payout transactions.
 
 
-## 2. Technical Stack
+## 2. How to Run the Service
 
-* **Language:** Python (Version `3.9.21`)
-* **Core Framework:** Apache Spark (Version `3.3.2`) via PySpark
-* **Development Environment:** The script was developed and tested in a Databricks environment.
-
-## 3. How to Run the Service
-
-### 3.1. Dependencies
+### 2.1. Dependencies
 * An Apache Spark environment with PySpark installed.
 * The input files (`Transactions.csv`, `CDIRates.csv`) must be accessible by the Spark application.
 
-### 3.2. Configuration
+### 2.2. Configuration
 * Update the input file paths in the `main()` function of the script (`transactions_path`, `cdi_rates_path`).
 * Update output paths/table names if not using default Databricks tables (`wallet_history_output_path`, etc.).
 
-### 3.3. Execution
+### 2.3. Execution
 * **Using `spark-submit` (Recommended for standalone execution):**
     ```bash
     spark-submit cdi_interest_calculator.py
@@ -31,11 +25,17 @@ This project implements a data product to calculate the daily CDI (Certificado d
     2.  Ensure the input CSV files are accessible (e.g., in DBFS at the specified paths).
     3.  Run the notebook.
 
+## 3. Technical Stack
+
+* **Language:** Python (Version `3.9.21`)
+* **Core Framework:** Apache Spark (Version `3.3.2`) via PySpark
+* **Development Environment:** The script was developed and tested in a Databricks environment.
+
 ## 4. Input Data
 
-The data product consumes two main CSV files - both can be found in the "data" folder:
+The data product consumes two main CSV files - both can be found in the "data" folder::
 
-* **`Transactions.csv`**: Contains raw change data capture (CDC) updates to users wallets over time.
+* **`Transactions.csv`**: Contains raw change data capture (CDC) updates to users' wallets over time.
     * **Columns:**
         * `user_id`: (String) Unique identifier for the user.
         * `timestamp`: (String, format `yyyy-MM-dd HH:mm:ss`) Timestamp of the transaction.
@@ -48,7 +48,7 @@ The data product consumes two main CSV files - both can be found in the "data" f
 
 ## 5. Processing Date Range
 
-The overall processing date range for balance history and interest calculation is determined dynamically at runtime. It is derived from the minimum and maximum dates found across both the `Transactions.csv` and the `CDIRates.csv`. This ensures all relevant data is considered for generating a complete end-of-day balance history and applying interest calculations.
+The overall processing date range for balance history and interest calculation is determined dynamically at runtime. It is derived from the minimum and maximum dates found across both the `Transactions.csv` (based on `transaction_date`) and the `CDIRates.csv` (based on `date`). This ensures all relevant data is considered for generating a complete end-of-day balance history and applying interest calculations.
 
 ## 6. Data Structures and Flow (Data Model Considerations)
 
@@ -72,33 +72,21 @@ The key DataFrames created and their purpose are:
     * Schema: `user_id`, `interest_date`, `eligible_principal`, `rate`, `interest_earned`.
     * Contains the actual interest amounts calculated for users who met the eligibility criteria on a given day.
 * **Interest Payout Transactions (`interest_payout_transactions_df`):**
-    * Schema: `user_id`, `timestamp` (set to `interest_date 23:59:59`), `transaction_type` ("interest/deposit"), `amount` (the `interest_earned`).
+    * Schema: `user_id`, `timestamp` (set to `interest_date 23:59:59`), `transaction_type` ("interest\_deposit"), `amount` (the `interest_earned`).
     * Formatted as new transactions ready to be potentially ingested back into a transactional system.
 
 This pipeline follows an Extract-Transform-Load (ETL) pattern, where data is read, transformed through various stages to meet business logic, and then prepared for loading/saving. The structures are designed for the specific calculations rather than for general-purpose transactional integrity like in a 3NF OLTP database.
 
-## 7. Functional Requirements Coverage
-
-The implementation addresses the core functional requirements as follows:
-
-* **Wallet History:** `create_wallet_history` and `get_end_of_the_day_balances` functions generate a comprehensive history of wallet balances.
-* **Interest Calculation Rules:**
-    * **Balance > $100:** The `calculate_daily_interest` function filters for `balance_sod > 100`.
-    * **Balance not moved for 24 hours:** Implemented by checking that there were no transactions (`had_transactions_on_prev_day == False`) on the day preceding the `interest_date`. The interest is calculated on the `balance_sod` (Start of Day balance for `interest_date`, which is the End of Day balance from `interest_date - 1`).
-* **Daily Variable Interest Rate:** `calculate_daily_interest` joins with the daily CDI rates.
-* **Daily Time Frame (00:00-23:59):** Calculations are based on daily EOD balances, and interest payouts are timestamped at the end of the calculation day.
-* **Daily Payout:** `format_interest_as_transactions` prepares daily interest deposits.
-
-## 8. Design Choices & Logic Explanation
+## 7. Design Choices & Logic Explanation
 
 This section details the logic within each major component of the Spark application.
 
-### 8.1. Spark Session Initialization (`create_spark_session`)
+### 7.1. Spark Session Initialization (`create_spark_session`)
 
-* `.config("spark.sql.adaptive.enabled", "true")`: Enables Adaptive Query Execution (AQE) in Spark SQL. This helps improve performance by adjusting execution strategies after shuffle operations. This is set enable by default in more recent Spark versions, the configuration is useful if the application is running on a older version.
-* `.config("spark.sql.legacy.timeParserPolicy", "LEGACY")`: This configuration determines how Spark parses and formats date and timestamp strings. Setting it to LEGACY ensures that Spark uses the parsing behavior consistent with older versions of Spark, so the LEGACY policy can be more forgiving of minor variations that might cause erros.
+* `.config("spark.sql.adaptive.enabled", "true")`: Enables Adaptive Query Execution (AQE) in Spark. This helps improve performance by adjusting execution strategies after shuffle operations. This is set enable by default in more recent Spark versions, the configuration is useful if the application is running on a older version.
+* `.config("spark.sql.legacy.timeParserPolicy", "LEGACY")`: This configuration determines how Spark parses and formats date and timestamp strings. Setting it to LEGACY ensures that Spark uses the parsing behavior consistent with older versions of Spark, so the LEGACY policy can be more forgiving of minor variations that might cause errors.
 
-### 8.2. Data Loading and Preparation (`load_transactions`, `load_cdi_rates`)
+### 7.2. Data Loading and Preparation (`load_transactions`, `load_cdi_rates`)
 
 This crucial first step loads data from `Transactions.csv` and `CDIRates.csv`. Key practices include using `header=True` for column names and `inferSchema=False` to enforce explicit data type definitions.
 
@@ -111,19 +99,19 @@ This crucial first step loads data from `Transactions.csv` and `CDIRates.csv`. K
 
 **`load_cdi_rates(spark, path)`:**
 * Loads daily CDI rates and converts data types:
-    * `rate`: Cast to `DecimalType()`, providing high precision suitable for financial rates.
+    * `rate`: Cast to `DecimalType(10, 8)`, providing high precision suitable for financial rates.
     * `date`: Converted from string to `DateType` using the format `"yyyy-MM-dd"`.
 * **Error Handling (Implicit):** Malformed dates resulting in `null` would not join during interest calculation. The quality of the CDI rates file is assumed to be high.
 
 These steps ensure that data entering the core logic is correctly typed and structured, with basic cleaning for critical fields like timestamps.
 
-### 8.3. Wallet History Generation (`create_wallet_history`)
+### 7.3. Wallet History Generation (`create_wallet_history`)
 
 This function constructs a detailed transaction-by-transaction history for each user.
 * It first determines the `balance_change` for each transaction (negative for withdrawals, positive otherwise).
 * Then, using a Spark window function (`Window.partitionBy("user_id").orderBy("timestamp")`), it calculates the `balance_after_transaction` as a running cumulative sum of `balance_change` for each user, chronologically. This provides a precise balance at every point a transaction occurs.
 
-### 8.4. End-of-Day Balance Calculation (`get_end_of_the_day_balances`)
+### 7.4. End-of-Day Balance Calculation (`get_end_of_the_day_balances`)
 
 To ensure accurate daily interest calculation, this function determines each user's wallet balance at the end of every day (`23:59:59`) within the defined processing period.
 * A comprehensive `user-date_grid` is created by cross-joining all distinct users with all dates in the processing range. This guarantees a row for every user for every day.
@@ -132,7 +120,7 @@ To ensure accurate daily interest calculation, this function determines each use
 * Users with no transaction history prior to a date are assigned an `eod_balance` of `0.0` using `F.coalesce`.
 * The function also includes logic to handle invalid date ranges, returning an empty DataFrame with the correct schema if the maximum date is not greater than the minimum date.
 
-### 8.5. Interest Eligibility and Calculation (`calculate_daily_interest`)
+### 7.5. Interest Eligibility and Calculation (`calculate_daily_interest`)
 
 This core function applies the business rules to determine interest eligibility and calculate the amounts.
 * **Start-of-Day (SOD) Balance:** For each `interest_date`, the SOD balance is derived by taking the End-of-Day (EOD) balance from the previous day (`F.lag("eod_balance", 1, 0.0)`), defaulting to `0.0` for the first day in a user's history.
@@ -141,7 +129,7 @@ This core function applies the business rules to determine interest eligibility 
 * **Eligible Principal:** Only if both stability and threshold rules are met, the `balance_sod` becomes the `eligible_principal`; otherwise, it's `0.0`.
 * **Joining with CDI Rates & Calculation:** The `eligible_principal` is joined with the `cdi_rates_df` on the `interest_date`. The `interest_earned` is calculated as `eligible_principal * daily_rate` and rounded to 4 decimal places. Only records with `interest_earned > 0` are kept.
 
-### 8.6. Formatting Payout Transactions (`format_interest_as_transactions`)
+### 7.6. Formatting Payout Transactions (`format_interest_as_transactions`)
 
 This function transforms the calculated daily interest amounts into a standardized transaction format, ready for potential ingestion.
 * Each record of `interest_earned` is converted into a new transaction.
@@ -149,7 +137,7 @@ This function transforms the calculated daily interest amounts into a standardiz
 * A `transaction_type` is assigned as `"interest_deposit"`.
 * The `interest_earned` becomes the `amount` of this new transaction.
 
-### 8.7. Output Generation
+### 7.7. Output Generation
 
 The final step involves persisting the generated DataFrames.
 * Key intermediate and final results, including `wallet_history_intermediate_df`, `daily_eod_balances_df`, `daily_interest_df`, and `interest_payout_transactions_df`, are saved.
@@ -157,17 +145,7 @@ The final step involves persisting the generated DataFrames.
 * Operations are written using `saveAsTable()`, common in Databricks environments. The code notes that for other environments, alternatives like `write.parquet("path")` would be used.
 * Basic error handling using `try-except` blocks is included for each save operation, printing an error message if a save fails.
 
-## 9. Non-Functional Requirements Addressed
-
-* **Visibility:** The script includes numerous `print` statements to display sample DataFrames at various stages and log messages for key operations (e.g., saving data, empty data checks). This aids in debugging and monitoring the process flow.
-* **Error Handling:**
-    * Timestamp parsing errors in `load_transactions` result in nulls, which are then filtered out.
-    * `get_end_of_the_day_balances` includes a check for invalid date ranges.
-    * The `main` function checks if initially loaded DataFrames are empty.
-    * Saving operations are wrapped in `try-except` blocks to catch and print potential errors.
-* **Modularity & Clarity:** The code is organized into distinct functions with descriptive names, improving readability and maintainability. Variable names are generally clear.
-
-## 10. Output Description
+## 8. Output Description
 
 The service generates the following outputs (saved as tables):
 
@@ -180,13 +158,34 @@ The service generates the following outputs (saved as tables):
 4.  **`interest_payouts`**: Interest amounts formatted as new deposit transactions.
     * Columns: `user_id`, `timestamp`, `transaction_type`, `amount`.
 
-## 11. Compromises or Trade-offs Made 
+## 9. Functional Requirements Coverage
+
+The implementation addresses the core functional requirements as follows:
+
+* **Wallet History:** `create_wallet_history` and `get_end_of_the_day_balances` functions generate a comprehensive history of wallet balances.
+* **Interest Calculation Rules:**
+    * **Balance > $100:** The `calculate_daily_interest` function filters for `balance_sod > 100`.
+    * **Balance not moved for 24 hours:** Implemented by checking that there were no transactions (`had_transactions_on_prev_day == False`) on the day preceding the `interest_date`. The interest is calculated on the `balance_sod` (Start of Day balance for `interest_date`, which is the End of Day balance from `interest_date - 1`).
+* **Daily Variable Interest Rate:** `calculate_daily_interest` joins with the daily CDI rates.
+* **Daily Time Frame (00:00-23:59):** Calculations are based on daily EOD balances, and interest payouts are timestamped at the end of the calculation day.
+* **Daily Payout:** `format_interest_as_transactions` prepares daily interest deposits.
+
+## 10. Non-Functional Requirements Addressed
+
+* **Visibility:** The script includes numerous `print` statements to display sample DataFrames at various stages and log messages for key operations (e.g., saving data, empty data checks). This aids in debugging and monitoring the process flow.
+* **Error Handling:**
+    * Timestamp parsing errors in `load_transactions` result in nulls, which are then filtered out.
+    * `get_end_of_the_day_balances` includes a check for invalid date ranges.
+    * The `main` function checks if initially loaded DataFrames are empty.
+    * Saving operations are wrapped in `try-except` blocks to catch and print potential errors.
+* **Modularity & Clarity:** The code is organized into distinct functions with descriptive names, improving readability and maintainability. Variable names are generally clear.
+
+## 11. Compromises or Trade-offs Made
 
 * *Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic.*
 * *The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system.*
 * *Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables.*
 * *While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues.*
-
 * **Interpretation of "Balance Not Moved for 24 Hours" Rule:**
     * **Current Implementation:** The solution interprets the requirement "Users will earn interest on the balance in their wallet that hasn’t been moved for at least 24 hours" in a straightforward manner: *any* transaction (be it a deposit or a withdrawal) recorded on the previous day (Day D-1) means the Start-of-Day balance for the current day (Day D) is considered "moved" and thus ineligible for interest on Day D. This eligibility check is based on the `had_transactions_on_prev_day` flag.
     * **Alternative Consideration:** A business might wish to allow deposits without penalizing interest accrual (as deposits increase the balance), and only consider withdrawals or specific types of debits as "movements" that would make the balance (or a portion of it) ineligible.
@@ -198,10 +197,9 @@ The service generates the following outputs (saved as tables):
             * **Data Requirements:** Such logic might also imply a need for more granular data about the *impact* of transactions on specific "parcels" of money, which is beyond the scope of the provided CDC data.
         3.  **Time Constraints and Scope:** Given the context of this assignment, the simpler and more direct interpretation was adopted to deliver a robust and functional solution within a reasonable timeframe. Clarifying and implementing the more complex, nuanced logic would require significant additional specification, development, and testing effort.
     * **Impact:** The current implementation is more conservative in awarding interest, as any transaction on the previous day (including deposits) disqualifies the balance from that day for interest calculation on the subsequent day.
-
 * **Daily Compounding of Interest (Cumulative Interest):**
-    * **Current Implementation:** The script calculates daily simple interest based on the eligible Start-of-Day (SOD) balance. The interest earned for a given day is then formatted as a new "interest/deposit" transaction, which is timestamped for the end of that day. This interest amount is not added back into the balance to earn further interest *within the same execution pass* for subsequent days in the processing period.
-    * **Alternative Expectations:** In many systems, interest credited to an account typically becomes part of the principal balance for the next compounding period. Alternatively, some systems might keep earned interest separate, with only the original principal earning further interest, which is functionally similar to the direct outcome of this project's single-run calculation before payout re-ingestion. (*Suggestion: Reworded for clarity*).
+    * **Current Implementation:** The script calculates daily simple interest based on the eligible Start-of-Day (SOD) balance. The interest earned for a given day is then formatted as a new "interest\_deposit" transaction, which is timestamped for the end of that day. This interest amount is not added back into the balance to earn further interest *within the same execution pass* for subsequent days in the processing period.
+    * **Alternative Expectations:** In many systems, interest credited to an account typically becomes part of the principal balance for the next compounding period. Alternatively, some systems might keep earned interest separate, with only the original principal earning further interest, which is functionally similar to the direct outcome of this project's single-run calculation before payout re-ingestion.
     * **Reason for the Chosen Approach (Trade-off):**
         1.  **Simplified Batch Processing Logic:** Implementing true daily compounding *within a single batch execution that processes multiple days* would significantly increase the complexity of the Spark application. The pipeline would need to iteratively:
             * Calculate interest for Day D.
@@ -209,7 +207,7 @@ The service generates the following outputs (saved as tables):
             * Use this newly augmented EOD balance as the SOD balance for Day D+1.
             This creates a sequential dependency within the daily calculations, making vectorized DataFrame operations across the entire period more challenging and potentially requiring iterative loops or more complex window function chaining to simulate the effect.
         2.  **Clear Separation of Concerns:** The current design clearly separates the calculation of interest based on a defined set of balances from the "payout" of that interest. The output `interest_payouts` DataFrame represents these payouts.
-        3.  **Achieving Compounding Across Processing Cycles:** The design implicitly supports compounding over time. It's assumed that the generated "interest/deposit" transactions would be ingested by the main transactional system. When this CDI bonus calculation job runs for the *next* period, these past interest deposits will naturally be part of the user's balance, and thus, interest will be calculated on them. Compounding therefore occurs across distinct batch processing cycles rather than intra-batch.
+        3.  **Achieving Compounding Across Processing Cycles:** The design implicitly supports compounding over time. It's assumed that the generated "interest\_deposit" transactions would be ingested by the main transactional system. When this CDI bonus calculation job runs for the *next* period, these past interest deposits will naturally be part of the user's balance, and thus, interest will be calculated on them. Compounding therefore occurs across distinct batch processing cycles rather than intra-batch.
     * **Impact:** The interest calculated for a user over a multi-day period in a single job run does not include the effect of interest compounding day-over-day *within that specific run*. For example, interest earned on Monday (and paid out Monday night) does not contribute to the interest-earning balance for Tuesday *in the same batch process*. However, it would contribute if the job is run again for Tuesday after Monday's interest has been posted to the account. This approach simplifies the daily batch calculation considerably.
 
 ## 12. Recommendations for Production Ingestion
@@ -221,12 +219,11 @@ The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is
 * **Transactional Integrity:** Use appropriate transaction controls in the database when inserting these new interest transactions.
 * **Monitoring & Alerting:** Implement monitoring on the ingestion job to track success/failure and data quality.
 * **Scheduling:** Schedule the Spark job and the subsequent ingestion process to run daily after market close or when CDI rates for the day are finalized.
-* **Enabling Compounding via Feedback Loop:** A critical part of the ingestion process is to feed the generated `interest_payouts` back into the main transactional system. These ingested deposits must then be reflected in the input transaction data used for the next execution cycle of the job, in case the business chooses to add the interest to the principal.
-
+* **Enabling Compounding via Feedback Loop:** To ensure that daily interest can compound as described (i.e., interest earned becomes part of the principal for subsequent calculations), it is essential that the ingestion process feeds the generated `interest_payouts` back into the main transactional system. These ingested deposits must then be accurately reflected in the input transaction data for the *next* execution cycle of this CDI bonus calculation job.
 
 ## 13. Potential Future Enhancements
 
-* **Advanced Data Validation:** Implement schema validation for input files (e.g., using tools like Great Expectations, or stricter Spark schema definitions with assertions) (*Suggestion: More specific examples*) and more sophisticated data quality checks (e.g., for anomalous transaction amounts, negative balances).
+* **Advanced Data Validation:** Implement schema validation for input files (using tools like Great Expectations) and more sophisticated data quality checks (e.g., for anomalous transaction amounts, negative balances).
 * **Configuration Management:** Externalize all configurable parameters (file paths, output table names, thresholds) using a configuration file (e.g., YAML, JSON) or environment variables.
 * **Robust Logging & Alerting:** Integrate with a centralized logging system and set up alerts for failures or critical issues.
 * **Comprehensive Testing:** Develop unit tests for individual functions (especially complex transformations) and integration tests for the end-to-end pipeline.
