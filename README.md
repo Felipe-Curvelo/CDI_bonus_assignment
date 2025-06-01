@@ -182,10 +182,10 @@ The implementation addresses the core functional requirements as follows:
 
 ## 11. Compromises or Trade-offs Made
 
-* *Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic.*
-* *The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system.*
-* *Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables.*
-* *While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues.*
+* Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic.
+* The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system.
+* Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables.
+* While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues.
 * **Interpretation of "Balance Not Moved for 24 Hours" Rule:**
     * **Current Implementation:** The solution interprets the requirement "Users will earn interest on the balance in their wallet that hasn’t been moved for at least 24 hours" in a straightforward manner: *any* transaction (be it a deposit or a withdrawal) recorded on the previous day (Day D-1) means the Start-of-Day balance for the current day (Day D) is considered "moved" and thus ineligible for interest on Day D. This eligibility check is based on the `had_transactions_on_prev_day` flag.
     * **Alternative Consideration:** A business might wish to allow deposits without penalizing interest accrual (as deposits increase the balance), and only consider withdrawals or specific types of debits as "movements" that would make the balance (or a portion of it) ineligible.
