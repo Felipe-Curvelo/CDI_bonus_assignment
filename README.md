@@ -1,10 +1,9 @@
-[# CDI Bonus Calculation Data Product
+# CDI Bonus Calculation Data Product
 
 ## 1. Overview
 
 This project implements a data product to calculate the daily CDI (Certificado de Depósito Interbancário) bonus for user wallet balances. It processes raw transaction data and daily CDI rates to determine user eligibility, calculate interest earned, and generate interest payout transactions.
 
-This solution was developed as part of a assignment, focusing on demonstrating PySpark skills to build a mission-critical data pipeline that handles financial calculations. The system is designed to create an intermediate wallet history, calculate interest based on specific business rules, and output data ready for ingestion into a transactional production database.
 
 ## 2. Technical Stack
 
@@ -16,7 +15,7 @@ This solution was developed as part of a assignment, focusing on demonstrating P
 
 ### 3.1. Dependencies
 * An Apache Spark environment with PySpark installed.
-* The input files (`Transactions.csv`, `CDIRates.csv`: located in "data" folder of this repository) must be accessible by the Spark application.
+* The input files (`Transactions.csv`, `CDIRates.csv`) must be accessible by the Spark application.
 
 ### 3.2. Configuration
 * Update the input file paths in the `main()` function of the script (`transactions_path`, `cdi_rates_path`).
@@ -29,7 +28,7 @@ This solution was developed as part of a assignment, focusing on demonstrating P
     ```
 * **In a Databricks Notebook:**
     1.  Upload the script or paste its content into a notebook cell.
-    2.  Ensure the input CSV files found in 'data' folder of this repository are accessible (e.g., in DBFS at the specified paths).
+    2.  Ensure the input CSV files are accessible (e.g., in DBFS at the specified paths).
     3.  Run the notebook.
 
 ## 4. Input Data
@@ -49,7 +48,7 @@ The data product consumes two main CSV files - both can be found in the 'data' f
 
 ## 5. Processing Date Range
 
-The overall processing date range for balance history and interest calculation is determined dynamically at runtime. It is derived from the minimum and maximum dates found across both the `Transactions.csv` (based on `transaction_date`) and the `CDIRates.csv` (based on `date`). This ensures all relevant data is considered for generating a complete end-of-day balance history and applying interest calculations.
+The overall processing date range for balance history and interest calculation is determined dynamically at runtime. It is derived from the minimum and maximum dates found across both the `Transactions.csv` and the `CDIRates.csv`. This ensures all relevant data is considered for generating a complete end-of-day balance history and applying interest calculations.
 
 ## 6. Data Structures and Flow (Data Model Considerations)
 
@@ -73,7 +72,7 @@ The key DataFrames created and their purpose are:
     * Schema: `user_id`, `interest_date`, `eligible_principal`, `rate`, `interest_earned`.
     * Contains the actual interest amounts calculated for users who met the eligibility criteria on a given day.
 * **Interest Payout Transactions (`interest_payout_transactions_df`):**
-    * Schema: `user_id`, `timestamp` (set to `interest_date 23:59:59`), `transaction_type` ("interest\_deposit"), `amount` (the `interest_earned`).
+    * Schema: `user_id`, `timestamp` (set to `interest_date 23:59:59`), `transaction_type` ("interest/deposit"), `amount` (the `interest_earned`).
     * Formatted as new transactions ready to be potentially ingested back into a transactional system.
 
 This pipeline follows an Extract-Transform-Load (ETL) pattern, where data is read, transformed through various stages to meet business logic, and then prepared for loading/saving. The structures are designed for the specific calculations rather than for general-purpose transactional integrity like in a 3NF OLTP database.
@@ -112,7 +111,7 @@ This crucial first step loads data from `Transactions.csv` and `CDIRates.csv`. K
 
 **`load_cdi_rates(spark, path)`:**
 * Loads daily CDI rates and converts data types:
-    * `rate`: Cast to `DecimalType(10, 8)`, providing high precision suitable for financial rates.
+    * `rate`: Cast to `DecimalType()`, providing high precision suitable for financial rates.
     * `date`: Converted from string to `DateType` using the format `"yyyy-MM-dd"`.
 * **Error Handling (Implicit):** Malformed dates resulting in `null` would not join during interest calculation. The quality of the CDI rates file is assumed to be high.
 
@@ -181,22 +180,12 @@ The service generates the following outputs (saved as tables):
 4.  **`interest_payouts`**: Interest amounts formatted as new deposit transactions.
     * Columns: `user_id`, `timestamp`, `transaction_type`, `amount`.
 
-## 11. Recommendations for Production Ingestion
+## 11. Compromises or Trade-offs Made 
 
-The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is designed to be ingested into a production transactional database. Recommendations for this process include:
-
-* **Atomicity & Idempotency:** The target ingestion mechanism should ensure that interest payouts are applied atomically and idempotently. If the Spark job writes to a staging location/table, the downstream process loading into the transactional DB could use `MERGE` (UPSERT) operations based on `user_id` and `interest_date` (or a unique transaction ID if generated) to prevent duplicate payouts if the job is re-run.
-* **Staging Area:** Write the output to a reliable staging area (e.g., cloud storage as Parquet files, or a staging table).
-* **Transactional Integrity:** Use appropriate transaction controls in the database when inserting these new interest transactions.
-* **Monitoring & Alerting:** Implement monitoring on the ingestion job to track success/failure and data quality.
-* **Scheduling:** Schedule the Spark job and the subsequent ingestion process to run daily after market close or when CDI rates for the day are finalized.
-
-## 12. Compromises or Trade-offs Made
-
-* Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic.
-* The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system.
-* Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables.
-* While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues.
+* *"Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic."*
+* *"The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system."*
+* *"Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables."*
+* *"While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues."*
 
 * **Interpretation of "Balance Not Moved for 24 Hours" Rule:**
     * **Current Implementation:** The solution interprets the requirement "Users will earn interest on the balance in their wallet that hasn’t been moved for at least 24 hours" in a straightforward manner: *any* transaction (be it a deposit or a withdrawal) recorded on the previous day (Day D-1) means the Start-of-Day balance for the current day (Day D) is considered "moved" and thus ineligible for interest on Day D. This eligibility check is based on the `had_transactions_on_prev_day` flag.
@@ -212,7 +201,7 @@ The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is
 
 * **Daily Compounding of Interest (Cumulative Interest):**
     * **Current Implementation:** The script calculates daily simple interest based on the eligible Start-of-Day (SOD) balance. The interest earned for a given day is then formatted as a new "interest/deposit" transaction, which is timestamped for the end of that day. This interest amount is not added back into the balance to earn further interest *within the same execution pass* for subsequent days in the processing period.
-    * **Alternative Expectations:** In many systems, interest credited to an account becomes part of the principal balance and starts earning interest from the next compounding period or it will remain in a separate section of the wallet as "interest earned" and only the principal will earn interest, similar with what has been done on this project.
+    * **Alternative Expectations:** In many systems, interest credited to an account typically becomes part of the principal balance for the next compounding period. Alternatively, some systems might keep earned interest separate, with only the original principal earning further interest, which is functionally similar to the direct outcome of this project's single-run calculation before payout re-ingestion. (*Suggestion: Reworded for clarity*).
     * **Reason for the Chosen Approach (Trade-off):**
         1.  **Simplified Batch Processing Logic:** Implementing true daily compounding *within a single batch execution that processes multiple days* would significantly increase the complexity of the Spark application. The pipeline would need to iteratively:
             * Calculate interest for Day D.
@@ -223,13 +212,24 @@ The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is
         3.  **Achieving Compounding Across Processing Cycles:** The design implicitly supports compounding over time. It's assumed that the generated "interest/deposit" transactions would be ingested by the main transactional system. When this CDI bonus calculation job runs for the *next* period, these past interest deposits will naturally be part of the user's balance, and thus, interest will be calculated on them. Compounding therefore occurs across distinct batch processing cycles rather than intra-batch.
     * **Impact:** The interest calculated for a user over a multi-day period in a single job run does not include the effect of interest compounding day-over-day *within that specific run*. For example, interest earned on Monday (and paid out Monday night) does not contribute to the interest-earning balance for Tuesday *in the same batch process*. However, it would contribute if the job is run again for Tuesday after Monday's interest has been posted to the account. This approach simplifies the daily batch calculation considerably.
 
+## 12. Recommendations for Production Ingestion
+
+The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is designed to be ingested into a production transactional database. Recommendations for this process include:
+
+* **Atomicity & Idempotency:** The target ingestion mechanism should ensure that interest payouts are applied atomically and idempotently. If the Spark job writes to a staging location/table, the downstream process loading into the transactional DB could use `MERGE` (UPSERT) operations based on `user_id` and `interest_date` (or a unique transaction ID if generated) to prevent duplicate payouts if the job is re-run.
+* **Staging Area:** Write the output to a reliable staging area (e.g., cloud storage as Parquet files, or a staging table).
+* **Transactional Integrity:** Use appropriate transaction controls in the database when inserting these new interest transactions.
+* **Monitoring & Alerting:** Implement monitoring on the ingestion job to track success/failure and data quality.
+* **Scheduling:** Schedule the Spark job and the subsequent ingestion process to run daily after market close or when CDI rates for the day are finalized.
+* **Enabling Compounding via Feedback Loop:** A critical part of the ingestion process is to feed the generated `interest_payouts` back into the main transactional system. These ingested deposits must then be reflected in the input transaction data used for the next execution cycle of the job, in case the business chooses to add the interest to the principal.
+
+
 ## 13. Potential Future Enhancements
 
-* **Advanced Data Validation:** Implement schema validation for input files (e.g., using Expectations or Spark schemas with assertions) and more sophisticated data quality checks (e.g., for anomalous transaction amounts, negative balances).
+* **Advanced Data Validation:** Implement schema validation for input files (e.g., using tools like Great Expectations, or stricter Spark schema definitions with assertions) (*Suggestion: More specific examples*) and more sophisticated data quality checks (e.g., for anomalous transaction amounts, negative balances).
 * **Configuration Management:** Externalize all configurable parameters (file paths, output table names, thresholds) using a configuration file (e.g., YAML, JSON) or environment variables.
 * **Robust Logging & Alerting:** Integrate with a centralized logging system and set up alerts for failures or critical issues.
 * **Comprehensive Testing:** Develop unit tests for individual functions (especially complex transformations) and integration tests for the end-to-end pipeline.
 * **Delta Lake Integration:** For enhanced reliability, ACID transactions, and time travel capabilities on the output tables, consider using Delta Lake format instead of basic Parquet or Hive tables, especially if operating in an environment like Databricks.
 * **Parameterization of Interest Rules:** If rules (like the $100 threshold or movement rules) might change frequently, consider making them configurable.
 * **Workflow Orchestration:** Integrate the application into a data pipeline orchestrator (e.g., Airflow, ADF) for improved end-to-end manageability of the entire CDI bonus calculation workflow.
-](https://www.loom.com/share/c07b7f28d13e467199a192ac46f53a7b?sid=a1e7cbd0-795c-423f-a643-f875584414c3)
