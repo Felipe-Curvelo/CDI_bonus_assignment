@@ -5,6 +5,11 @@ from pyspark.sql.window import Window
 from pyspark.sql.types import DoubleType, StructType, StructField, DateType, DecimalType
 import datetime
 
+# Setting configs for better maintenance
+ELIGIBILITY_BALANCE_THRESHOLD = 100.0
+INTEREST_RATE_DECIMAL_PRECISION = 10
+INTEREST_RATE_DECIMAL_SCALE = 8
+
 
 def create_spark_session():
     # Creates and returns a SparkSession
@@ -19,6 +24,7 @@ def create_spark_session():
 def load_transactions(spark, path):
     # Loads transaction data from CSV
     df = spark.read.csv(path, header=True, inferSchema=False)
+    # To improve readability DoubleType was used, but in production environment DecimalType is recommended
     df = df.withColumn("amount", F.col("amount").cast(DoubleType())) \
            .withColumn("timestamp", F.to_timestamp(F.col("timestamp"), "yyyy-MM-dd HH:mm:ss")) \
            .withColumn("transaction_date", F.to_date(F.col("timestamp")))
@@ -30,7 +36,7 @@ def load_transactions(spark, path):
 def load_cdi_rates(spark, path):
     # Loads CDI rates from CSV.
     df = spark.read.csv(path, header=True, inferSchema=False)
-    df = df.withColumn("rate", F.col("rate").cast(DecimalType(10, 8))) \
+    df = df.withColumn("rate", F.col("rate").cast(DecimalType(INTEREST_RATE_DECIMAL_PRECISION, INTEREST_RATE_DECIMAL_SCALE))) \
         .withColumn("date", F.to_date(F.col("date"), "yyyy-MM-dd"))
     return df
 
@@ -57,9 +63,9 @@ def get_end_of_the_day_balances(wallet_history_df, min_date: datetime.date, max_
 
     num_days = (max_date - min_date).days + 1
     if num_days <= 0:  # edge case if max_date is not greater than min_date
+        user_id_type = wallet_history_df.schema["user_id"].dataType
         schema = StructType([
-            StructField("user_id", type(
-                wallet_history_df.schema["user_id"].dataType)(), True),
+            StructField("user_id", user_id_type, True),
             StructField("date", DateType(), True),
             StructField("eod_balance", DoubleType(), True)
         ])
@@ -70,7 +76,6 @@ def get_end_of_the_day_balances(wallet_history_df, min_date: datetime.date, max_
     dates_schema = StructType([
         StructField("date", DateType(), True)
     ])
-
     # Create a Dataframe with all dates no matter if the transactions has gaps between on date and another
     all_dates_df = spark.createDataFrame(
         [Row(date=min_date + datetime.timedelta(days=i)) for i in range(num_days)], dates_schema)
@@ -81,7 +86,7 @@ def get_end_of_the_day_balances(wallet_history_df, min_date: datetime.date, max_
     window_last_txn_of_day = Window.partitionBy(
         "user_id", "transaction_date").orderBy(F.col("timestamp").desc())
 
-    balance_from_latest_txn_df = wallet_history_df \
+    balance_from_latest__df = wallet_history_df \
         .withColumn("rn", F.expr("row_number()").over(window_last_txn_of_day)) \
         .filter(F.col("rn") == 1) \
         .select(
@@ -91,7 +96,7 @@ def get_end_of_the_day_balances(wallet_history_df, min_date: datetime.date, max_
         )
 
     udg_alias = user_date_grid_df.alias("udg")
-    bflt_alias = balance_from_latest_txn_df.alias("bflt")
+    bflt_alias = balance_from_latest__df.alias("bflt")
 
     joined_for_fill_df = udg_alias.join(
         bflt_alias,
@@ -165,7 +170,7 @@ def calculate_daily_interest(daily_eod_balances_df, transactions_df, cdi_rates_d
     # 4. Apply eligibility rules
     eligible_for_interest_df = eligibility_df \
         .withColumn("is_elegible",
-                    (F.col("balance_sod") > 100) & (
+                    (F.col("balance_sod") > ELIGIBILITY_BALANCE_THRESHOLD) & (
                         F.col("had_transactions_on_prev_day") == False)
                     ) \
         .withColumn("eligible_principal", F.when(F.col("is_elegible"), F.col("balance_sod")).otherwise(0.0)) \
@@ -299,43 +304,36 @@ def main():
 
     # Change the format of saving in case of this code is running outside Databricks environment
     try:
-        wallet_history_intermediate_df.write.mode(
-            "overwrite").saveAsTable(wallet_history_output_path)
+        wallet_history_intermediate_df.write.mode("overwrite").saveAsTable(wallet_history_output_path)
         print(f"Sucessfuly saved Wallet History")
     except Exception as e:
         print(f"Error saving Wallet History: {e}")
-
-    print(
-        f"\n--- Saving Interest Payout Transactions: {interest_payouts_output_path} ---")
+    
+    print(f"\n--- Saving Interest Payout Transactions: {interest_payouts_output_path} ---")
 
     try:
-        interest_payout_transactions_df.write.mode(
-            "overwrite").saveAsTable(interest_payouts_output_path)
+        interest_payout_transactions_df.write.mode("overwrite").saveAsTable(interest_payouts_output_path)
         print(f"Successfully saved Interest Payout Transactions")
     except Exception as e:
         print(f"Error saving Interest Payout Transactions: {e}")
-
-    print(
-        f"\n--- Saving Daily End of the Day Balances: {daily_eod_balances_output_path} ---")
+    
+    print(f"\n--- Saving Daily End of the Day Balances: {daily_eod_balances_output_path} ---")
 
     try:
-        daily_eod_balances_df.write.mode("overwrite").saveAsTable(
-            daily_eod_balances_output_path)
+        daily_eod_balances_df.write.mode("overwrite").saveAsTable(daily_eod_balances_output_path)
         print(f"Successfully saved Daily End of the Day Balances")
     except Exception as e:
         print(f"Error saving Daily End of the Day Balances: {e}")
-
-    print(
-        f"\n--- Saving Daily Interest Calculated: {daily_interest_calculated_output_path} ---")
+    
+    print(f"\n--- Saving Daily Interest Calculated: {daily_interest_calculated_output_path} ---")
 
     try:
-        daily_interest_df.write.mode("overwrite").saveAsTable(
-            daily_interest_calculated_output_path)
+        daily_interest_df.write.mode("overwrite").saveAsTable(daily_interest_calculated_output_path)
         print(f"Successfully saved Daily Interest Calculated")
     except Exception as e:
         print(f"Error saving Daily Interest Calculated: {e}")
 
-    print("\n--- CDI Bonus Calculation Process Completed ---")
+    print("\n--- CDI Bonus Calculation Process Completed ---")    
 
 
 if __name__ == "__main__":
