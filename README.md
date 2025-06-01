@@ -95,7 +95,7 @@ This section details the logic within each major component of the Spark applicat
 
 ### 8.1. Spark Session Initialization (`create_spark_session`)
 
-* `.config("spark.sql.adaptive.enabled", "true")`: Enables Adaptive Query Execution (AQE) in Spark SQL. AQE allows Spark to re-optimize query execution plans dynamically at runtime based on the actual statistics of the data being processed.
+* `.config("spark.sql.adaptive.enabled", "true")`: Enables Adaptive Query Execution (AQE) in Spark SQL. This helps improve performance by adjusting execution strategies after shuffle operations. This is set enable by default in more recent Spark versions, the configuration works only if the application is running on a older version.
 * `.config("spark.sql.legacy.timeParserPolicy", "LEGACY")`: This configuration determines how Spark parses and formats date and timestamp strings. Setting it to LEGACY ensures that Spark uses the parsing behavior consistent with older versions of Spark, so the LEGACY policy can be more forgiving of minor variations that might cause erros.
 
 ### 8.2. Data Loading and Preparation (`load_transactions`, `load_cdi_rates`)
