@@ -33,7 +33,7 @@ This project implements a data product to calculate the daily CDI (Certificado d
 
 ## 4. Input Data
 
-The data product consumes two main CSV files - both can be found in the 'data' folder:
+The data product consumes two main CSV files - both can be found in the "data" folder:
 
 * **`Transactions.csv`**: Contains raw change data capture (CDC) updates to users wallets over time.
     * **Columns:**
@@ -182,10 +182,10 @@ The service generates the following outputs (saved as tables):
 
 ## 11. Compromises or Trade-offs Made 
 
-* *"Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic."*
-* *"The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system."*
-* *"Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables."*
-* *"While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues."*
+* *Due to time constraints, a comprehensive unit and integration testing suite was not developed. In a production scenario, frameworks like `pytest` with Spark testing utilities would be used to validate each function and the overall pipeline logic.*
+* *The current error handling provides logging but does not include automated recovery or alerting mechanisms, which would be added in a production system.*
+* *Configuration (file paths, etc.) is currently hardcoded in the script. For production, this would be externalized to configuration files or environment variables.*
+* *While DecimalType is used for rates, monetary amounts in transactions were loaded as DoubleType for simplicity in this exercise. A production system would enforce DecimalType for all monetary values to prevent precision issues.*
 
 * **Interpretation of "Balance Not Moved for 24 Hours" Rule:**
     * **Current Implementation:** The solution interprets the requirement "Users will earn interest on the balance in their wallet that hasn’t been moved for at least 24 hours" in a straightforward manner: *any* transaction (be it a deposit or a withdrawal) recorded on the previous day (Day D-1) means the Start-of-Day balance for the current day (Day D) is considered "moved" and thus ineligible for interest on Day D. This eligibility check is based on the `had_transactions_on_prev_day` flag.
@@ -231,5 +231,5 @@ The generated `interest_payout_transactions_df` (saved as `interest_payouts`) is
 * **Robust Logging & Alerting:** Integrate with a centralized logging system and set up alerts for failures or critical issues.
 * **Comprehensive Testing:** Develop unit tests for individual functions (especially complex transformations) and integration tests for the end-to-end pipeline.
 * **Delta Lake Integration:** For enhanced reliability, ACID transactions, and time travel capabilities on the output tables, consider using Delta Lake format instead of basic Parquet or Hive tables, especially if operating in an environment like Databricks.
-* **Parameterization of Interest Rules:** If rules (like the $100 threshold or movement rules) might change frequently, consider making them configurable.
+* **Parameterization of Rules:** Some rules where configured in the script (like the $100 threshold) consider making all of them configurable.
 * **Workflow Orchestration:** Integrate the application into a data pipeline orchestrator (e.g., Airflow, ADF) for improved end-to-end manageability of the entire CDI bonus calculation workflow.
