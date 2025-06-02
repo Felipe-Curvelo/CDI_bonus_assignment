@@ -4,6 +4,8 @@
 
 This project implements a data product to calculate the daily CDI (Certificado de Depósito Interbancário) bonus for user wallet balances. It processes raw transaction data and daily CDI rates to determine user eligibility, calculate interest earned, and generate interest payout transactions.
 
+The core logic for these operations is implemented within the `cdi_interest_calculator.py` script.
+
 
 ## 2. How to Run the Service
 
